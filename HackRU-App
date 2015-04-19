@@ -1,0 +1,95 @@
+var express = require('express');
+var app = express();
+var server = require('http').createServer(app);
+var bodyParser = require('body-parser');
+var multer = require('multer');
+var fs = require('fs')
+var sendgrid = require("sendgrid")("Jarbo52", "PasswordIWillChange");
+var reviews = []
+
+function Review(initReview, initStars, initRest)
+{
+  var max = 5;
+  this.stars = initStars;
+  if(this.stars > max)
+    this.stars = max;
+  else
+    if(this.stars < 0)
+      stars = 0;
+
+  this.review = initReview;
+  this.restaurant = initRest;
+
+  this.toString = function() {
+      var result = ""
+      result += "Stars: " + this.stars + "/" + max +" ";
+      result += "Review: " + this.review;
+
+      return result
+  }
+}
+app.use(bodyParser.urlencoded({extended: false}));
+app.use(multer());
+
+app.post('/inbound', function(req, res)
+{
+    res.end()
+    var subjectField = req.body.subject
+    var partsOfSub = subjectField.split(", ")
+    var getOrMake = partsOfSub[0]
+    if(getOrMake === "Get")
+    {
+      var restaurantName = partsOfSub[1]
+      var sendBackTo = req.body.from
+
+      var applicableReviews = []
+      for(var i = 0; i < reviews.length; i++)
+      {
+        if(reviews[i].restaurant === restaurantName)
+        {
+            applicableReviews.push(reviews[i].toString())
+        }
+      }
+
+      var stuff = "";
+      for(var i = 0; i < applicableReviews.length; i++)
+      {
+        stuff += "Review #" + (i + 1) + ": "
+        stuff += applicableReviews[i] + "\n";
+      }
+
+      var email = new sendgrid.Email();
+
+      email.addTo(sendBackTo);
+      email.setFrom("reviews@ymdatabase.com");
+      email.setSubject("Reviews for " + restaurantName);
+      email.setHtml(stuff);
+
+      sendgrid.send(email);
+    }
+    else
+      if(getOrMake === "Make")
+      {
+        var restaurantName = partsOfSub[1]
+        var stars = partsOfSub[2]
+        var review = req.body.text
+        var sendBackTo = req.body.from
+
+        reviews.push(new Review(review, stars, restaurantName));
+
+        var firstPoint = sendBackTo.indexOf("<")
+        var secondPoint = sendBackTo.indexOf(">")
+        sendBackTo = sendBackTo.substring(firstPoint + 1, secondPoint)
+
+        var email = new sendgrid.Email();
+
+        email.addTo(sendBackTo);
+        email.setFrom("reviews@ymdatabase.com");
+        email.setSubject("Your review has been added!");
+        email.setHtml("Your review for " + restaurantName + " has been "+
+                      "added to our database! Thank you!");
+        sendgrid.send(email);
+      }
+})
+
+server.listen(3000);
